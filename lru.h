@@ -1,3 +1,6 @@
+#ifndef LRU_H
+#define LRU_H
+
 #include <unordered_map>
 #include <list>
 #include <cassert>
@@ -12,9 +15,8 @@ private:
 	typedef typename KeyMap::iterator KeyIterator;
 	
 public:
-	LRU(IO & io, size_t capacity, float maxLoadFactor = 1) 
-		: io(io) {
-		keys.max_load_factor(maxLoadFactor);
+	template <typename ...T>
+	LRU(size_t capacity, T... params) : io(params...) {
 		keys.reserve(capacity);
 	}
 	~LRU() {
@@ -32,7 +34,6 @@ public:
 		io.read(key, value);
 		
 		if (keys.size() >= capacity()) {
-			std::cout << "limit" << std::endl;
 			auto it = dataChain.end();
 			--it;
 			::operator delete(it->data);
@@ -74,5 +75,7 @@ private:
 	
 	DataList dataChain;
 	KeyMap keys;
-	IO & io;
+	IO io;
 };
+
+#endif

@@ -34,8 +34,9 @@ public:
 
 int main (int argc, char const *argv[])
 {
-	IO io({1,2,3,4},{1.1,1.2,1.3,1.4});
-	LRU<IO> cache(io, 4);
+	std::vector<int> a = {1,2,3,4};
+	std::vector<float> b = {1.1,1.2,1.3,1.4};
+	LRU<IO> cache(4, a, b);
 	for (int i = 0 ; i < 8 ; ++i) {
 		if (i % 2 == 0) {
 			int x;
