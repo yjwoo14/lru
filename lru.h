@@ -5,13 +5,30 @@
 #include <list>
 #include <cassert>
 
+namespace bits {
+
 template <typename IO>
-class LRU {
-private:
-	struct Data;
+struct Data {
 	typedef typename IO::KeyType KeyType;
 	typedef std::list<Data> DataList;
 	typedef std::unordered_map<KeyType, typename DataList::iterator> KeyMap;
+	typedef typename KeyMap::iterator KeyIterator;
+
+	void * data;
+	KeyIterator keyRef;
+};
+
+template <typename IO>
+struct DirtyData : public Data<IO> {
+	bool dirty;
+};
+
+template <typename IO, typename Data>
+class LRUBase {
+private:
+	typedef typename IO::KeyType KeyType;
+	typedef typename Data::DataList DataList;
+	typedef typename Data::KeyMap KeyMap;
 	typedef typename KeyMap::iterator KeyIterator;
 	
 public:
@@ -20,7 +37,7 @@ public:
 #endif
 
 	template <typename ...T>
-	LRU(size_t capacity, T... params) 
+	LRUBase(size_t capacity, T... params) 
 		: _capacity(capacity), io(params...) {
 		keys.reserve(capacity);
 		assert(capacity <= keys.max_load_factor() * keys.bucket_count());
@@ -29,9 +46,11 @@ public:
 #endif
 	}
 
-	~LRU() {
-		for (auto & d : data)
+	~LRUBase() {
+		for (auto & d : data) {
+			kick(d);
 			::operator delete(d.data);
+		}
 	}
 	
 	template <typename ValueType>
@@ -52,32 +71,27 @@ public:
 		io.read(key, value);
 		
 		if (keys.size() >= capacity()) {
-			auto it = data.end();
-			--it;
+			auto it = --data.end();
+			kick(*it);
 			::operator delete(it->data);
-			it->data = ::operator new(sizeof(ValueType));
-			ValueType & space = *reinterpret_cast<ValueType *>(it->data);
+			// reuse data space in back()
 			data.splice(data.begin(), data, it);
 			
 			KeyIterator old = it->keyRef;
 			keys.erase(old);
-			
-			space = value;
-			auto p = keys.emplace(key, it);
-			it->keyRef = p.first;
 		} else {
 			// Make sure the stored references to keys valid
 			// http://stackoverflow.com/questions/16781886/can-we-store-unordered-maptiterator
 			assert(keys.size() < (double)keys.max_load_factor() * keys.bucket_count());
 			data.emplace_front();
-			auto it = data.begin();
-			it->data = ::operator new(sizeof(value));
-			ValueType & space = *reinterpret_cast<ValueType *>(it->data);
-			
-			space = value;
-			auto p = keys.emplace(key, it);
-			it->keyRef = p.first;
 		}
+		auto begin = data.begin();
+		begin->data = ::operator new(sizeof(value));
+		ValueType & storage = *reinterpret_cast<ValueType *>(begin->data);
+		
+		storage = value;
+		auto p = keys.emplace(key, begin);
+		begin->keyRef = p.first;
 	}
 
 	size_t capacity() const {
@@ -89,15 +103,25 @@ public:
 	}
 	
 private:
-	struct Data{
-		void * data;
-		KeyIterator keyRef;
-	};
-	
+	virtual void kick(const Data & target) {}
+
 	const size_t _capacity;
 	DataList data;
 	KeyMap keys;
 	IO io;
+};
+
+}
+
+template <typename IO>
+class ReadOnlyLRU : public bits::LRUBase<IO, bits::Data<IO>> {
+public:
+	typedef bits::LRUBase<IO, bits::Data<IO>> LRUBase;
+	template <typename ...T>
+	ReadOnlyLRU(T... params) : LRUBase(params...) {}
+private:
+	typedef bits::Data<IO> Data;
+	void kick(const Data & target) {}
 };
 
 #endif
