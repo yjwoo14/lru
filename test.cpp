@@ -37,28 +37,16 @@ int main (int argc, char const *argv[])
 	std::vector<int> a = {1,2,3,4};
 	std::vector<float> b = {1.1,1.2,1.3,1.4};
 	LRU<IO> cache(4, a, b);
-	for (int i = 0 ; i < 8 ; ++i) {
-		if (i % 2 == 0) {
-			int x;
-			cache.read(i, x);
-			std::cout << i << " int: " << x << std::endl;
-		} else {
-			float x;
-			cache.read(i, x);
-			std::cout << i << " float: " << x << std::endl;
-		}
+	std::vector<size_t> acc = {0,1,2,3,0,4,5,6,0,7};
+	int  c;
+	float d;
+	for (size_t i = 0 ; i < acc.size() ; ++i) {
+		if (acc[i] % 2)
+			cache.read(acc[i], d);
+		else
+			cache.read(acc[i], c);
 	}
-	for (int i = 8 ; i --> 0 ;) {
-		if (i % 2 == 0) {
-			int x;
-			cache.read(i, x);
-			std::cout << i << " int: " << x << std::endl;
-		} else {
-			float x;
-			cache.read(i, x);
-			std::cout << i << " float: " << x << std::endl;
-		}
-	}
+	std::cout << cache.capacity() << " " << cache.hit << " " << cache.miss << std::endl;
 	
 	return 0;
 }
