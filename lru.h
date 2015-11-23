@@ -5,6 +5,7 @@
 #include <list>
 #include <cassert>
 #include <algorithm>
+#include <cstring>
 
 namespace bits {
 
@@ -72,38 +73,33 @@ public:
 #ifndef NDEBUG
 			hit++;
 #endif
-			std::copy(reinterpret_cast<const uint8_t*>(it->second->data), 
-					  reinterpret_cast<const uint8_t*>(it->second->data)+size, 
-					  reinterpret_cast<uint8_t*>(value));
+			std::memcpy(value, it->second->data, size);
 			data.splice(data.begin(), data, it->second);
 			return;
 		}
 #ifndef NDEBUG
 		miss++;
 #endif
-
 		io.read(key, value, size);
-		
+
 		if (keys.size() >= capacity()) {
-			auto it = --data.end();
+			auto it = data.end();
+			--it;
 			static_cast<L*>(this)->kick(*it);
 			::operator delete(it->data);
 			// reuse data space in back()
 			data.splice(data.begin(), data, it);
-			
-			KeyIterator old = it->keyRef;
-			keys.erase(old);
+			keys.erase(it->keyRef);
 		} else {
 			// Make sure the stored references to keys valid
 			// http://stackoverflow.com/questions/16781886/can-we-store-unordered-maptiterator
 			assert(keys.size() < (double)keys.max_load_factor() * keys.bucket_count());
 			data.emplace_front();
 		}
+
 		auto begin = data.begin();
 		begin->data = ::operator new(size);
-		std::copy(reinterpret_cast<const uint8_t *>(value), 
-				  reinterpret_cast<const uint8_t *>(value) + size, 
-				  reinterpret_cast<uint8_t *>(begin->data));
+		std::memcpy(begin->data, value, size);
 		auto p = keys.emplace(key, begin);
 		begin->keyRef = p.first;
 	}
@@ -170,11 +166,10 @@ public:
 		auto & data = static_cast<LRUBase*>(this)->data;
 		auto it = keys.find(key);
 		if (it != keys.end()) {
-			std::copy(reinterpret_cast<const uint8_t*>(value), 
-					  reinterpret_cast<const uint8_t*>(value)+size, 
-					  reinterpret_cast<uint8_t*>(it->second->data));
+			std::memcpy(it->second->data, value, size);
 			data.splice(data.begin(), data, it->second);
 			data.begin()->dirty = true;
+			data.begin()->size = size;
 			return;
 		}
 
@@ -184,9 +179,7 @@ public:
 			::operator delete(it->data);
 			// reuse data space in back()
 			data.splice(data.begin(), data, it);
-			
-			KeyIterator old = it->keyRef;
-			keys.erase(old);
+			keys.erase(it->keyRef);
 		} else {
 			// Make sure the stored references to keys valid
 			// http://stackoverflow.com/questions/16781886/can-we-store-unordered-maptiterator
@@ -195,18 +188,18 @@ public:
 		}
 		auto begin = data.begin();
 		begin->data = ::operator new(size);
-		std::copy(reinterpret_cast<const uint8_t *>(value), 
-				  reinterpret_cast<const uint8_t *>(value) + size, 
-				  reinterpret_cast<uint8_t *>(begin->data));
+		std::memcpy(begin->data, value, size);
+				  
 		auto p = keys.emplace(key, begin);
 		begin->keyRef = p.first;
 		data.begin()->dirty = true;
+		data.begin()->size = size;
 	}
 
 private:
 	template <typename, typename, typename>
 	friend class bits::LRUBase;
-
+	
 	void kick(const Data & target) override {
 		if (!target.dirty) return;
 		const KeyType & key = target.keyRef->first;
